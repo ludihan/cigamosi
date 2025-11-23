@@ -26,6 +26,9 @@
         devShells.default =
           with pkgs;
           mkShell {
+            shellHook = ''
+              export PS1="(nix-develop) $PS1"
+            '';
             buildInputs = [
               # Rust dependencies
               (rust-bin.stable.latest.default.override { extensions = [ "rust-src" ]; })
