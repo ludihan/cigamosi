@@ -1,41 +1,143 @@
-use bevy::prelude::*;
+use std::{f32::consts::FRAC_PI_2, ops::Range};
+
+use bevy::{
+    input::mouse::{AccumulatedMouseMotion, MouseScrollUnit, MouseWheel},
+    prelude::*,
+};
+
+#[derive(Debug, Resource)]
+struct CameraSettings {
+    pub orbit_distance: f32,
+    pub pitch_speed: f32,
+    // Clamp pitch to this range
+    pub pitch_range: Range<f32>,
+    pub roll_speed: f32,
+    pub yaw_speed: f32,
+}
+
+impl Default for CameraSettings {
+    fn default() -> Self {
+        // Limiting pitch stops some unexpected rotation past 90° up or down.
+        let pitch_limit = FRAC_PI_2 - 0.01;
+        Self {
+            // These values are completely arbitrary, chosen because they seem to produce
+            // "sensible" results for this example. Adjust as required.
+            orbit_distance: 20.0,
+            pitch_speed: 0.003,
+            pitch_range: -pitch_limit..pitch_limit,
+            roll_speed: 1.0,
+            yaw_speed: 0.004,
+        }
+    }
+}
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_systems(Startup, setup)
+        .init_resource::<CameraSettings>()
+        .add_systems(Startup, (setup, instructions))
+        .add_systems(Update, orbit)
         .run();
 }
 
-/// set up a simple 3D scene
+/// Set up a simple 3D scene
 fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    // circular base
     commands.spawn((
-        Mesh3d(meshes.add(Circle::new(4.0))),
-        MeshMaterial3d(materials.add(Color::WHITE)),
-        Transform::from_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+        Name::new("Camera"),
+        Camera3d::default(),
+        Transform::from_xyz(5.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
-    // cube
+
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
-        MeshMaterial3d(materials.add(Color::srgb_u8(124, 144, 255))),
-        Transform::from_xyz(0.0, 0.5, 0.0),
+        Name::new("Plane"),
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(5.0, 5.0))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.3, 0.5, 0.3),
+            // Turning off culling keeps the plane visible when viewed from beneath.
+            cull_mode: None,
+            ..default()
+        })),
     ));
-    // light
+
     commands.spawn((
-        PointLight {
-            shadows_enabled: true,
+        Name::new("Cube"),
+        Mesh3d(meshes.add(Cuboid::default())),
+        MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
+        Transform::from_xyz(1.5, 0.51, 1.5),
+    ));
+
+    commands.spawn((
+        Name::new("Light"),
+        PointLight::default(),
+        Transform::from_xyz(3.0, 8.0, 5.0),
+    ));
+}
+
+fn instructions(mut commands: Commands) {
+    commands.spawn((
+        Name::new("Instructions"),
+        Text::new(
+            "Mouse up or down: pitch\n\
+            Mouse left or right: yaw\n\
+            Mouse buttons: roll",
+        ),
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(12),
+            left: px(12),
             ..default()
         },
-        Transform::from_xyz(4.0, 8.0, 4.0),
     ));
-    // camera
-    commands.spawn((
-        Camera3d::default(),
-        Transform::from_xyz(-2.5, 4.5, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
+}
+
+fn orbit(
+    mut camera: Single<&mut Transform, With<Camera>>,
+    mut camera_settings: ResMut<CameraSettings>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    mut mouse_scroll: MessageReader<MouseWheel>,
+    mouse_motion: Res<AccumulatedMouseMotion>,
+    time: Res<Time>,
+) {
+    let target = Vec3::ZERO;
+    let delta = mouse_motion.delta;
+    let mut delta_roll = 0.0;
+
+    for ev in mouse_scroll.read() {
+        camera_settings.orbit_distance -= ev.y;
+    }
+
+    // Only orbit if pressing left mouse button
+    if !mouse_buttons.pressed(MouseButton::Right) {
+        camera.translation = target - camera.forward() * camera_settings.orbit_distance;
+        return;
+    };
+
+    // Mouse motion is one of the few inputs that should not be multiplied by delta time,
+    // as we are already receiving the full movement since the last frame was rendered. Multiplying
+    // by delta time here would make the movement slower that it should be.
+    let delta_pitch = -(delta.y * camera_settings.pitch_speed);
+    let delta_yaw = -(delta.x * camera_settings.yaw_speed);
+
+    // Conversely, we DO need to factor in delta time for mouse button inputs.
+    delta_roll *= camera_settings.roll_speed * time.delta_secs();
+
+    // Obtain the existing pitch, yaw, and roll values from the transform.
+    let (yaw, pitch, roll) = camera.rotation.to_euler(EulerRot::YXZ);
+
+    // Establish the new yaw and pitch, preventing the pitch value from exceeding our limits.
+    let pitch = (pitch + delta_pitch).clamp(
+        camera_settings.pitch_range.start,
+        camera_settings.pitch_range.end,
+    );
+    let roll = roll + delta_roll;
+    let yaw = yaw + delta_yaw;
+    camera.rotation = Quat::from_euler(EulerRot::YXZ, yaw, pitch, roll);
+
+    // Adjust the translation to maintain the correct orientation toward the orbit target.
+    // In our example it's a static target, but this could easily be customized.
+    camera.translation = target - camera.forward() * camera_settings.orbit_distance;
 }
