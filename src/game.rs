@@ -53,7 +53,14 @@ fn setup(mut commands: Commands, assets: Res<AssetServer>) {
             scale: 1.,
             ..OrthographicProjection::default_3d()
         }),
-        Transform::from_xyz(5.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(5.0, 5.0, 5.0).looking_at(
+            Vec3 {
+                x: (LINE_NUMBER as f32) * 0.5,
+                y: 0.,
+                z: (LINE_NUMBER as f32) * 0.5,
+            },
+            Vec3::Y,
+        ),
     ));
 
     commands.insert_resource(camera_settings);
@@ -68,6 +75,8 @@ enum ObjectType {
     Cube,
     Ramp(Quat),
 }
+
+const LINE_NUMBER: i32 = 10;
 
 fn level_setup(
     mut commands: Commands,
@@ -96,7 +105,7 @@ fn level_setup(
             Name::new("Cube"),
             Mesh3d(meshes.add(Cuboid::default())),
             MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
-            Transform::from_xyz(1.5, 0.51, 1.5),
+            Transform::from_xyz(1.5, 0.5, 1.5),
         ))
         .observe(update_material_on::<Pointer<Over>>(hover_matl.clone()))
         .observe(update_material_on::<Pointer<Out>>(white_matl.clone()))
@@ -108,7 +117,7 @@ fn level_setup(
             Name::new("Cube2"),
             Mesh3d(meshes.add(Cuboid::default())),
             MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
-            Transform::from_xyz(2.5, 0.51, 1.5),
+            Transform::from_xyz(0.5, 0.5, 0.5),
         ))
         .observe(update_material_on::<Pointer<Over>>(hover_matl.clone()))
         .observe(update_material_on::<Pointer<Out>>(white_matl.clone()))
@@ -121,7 +130,7 @@ fn level_setup(
         Transform::from_xyz(3.0, 8.0, 5.0),
     ));
 
-    for v in (0..=20).step_by(2) {
+    for v in (0..=LINE_NUMBER).step_by(1) {
         // Line parallel to X-axis (offset on Z)
         let x_line = Segment3d {
             vertices: [
@@ -131,7 +140,7 @@ fn level_setup(
                     z: v as f32,
                 },
                 Vec3 {
-                    x: 20.,
+                    x: LINE_NUMBER as f32,
                     y: 0.,
                     z: v as f32,
                 },
@@ -149,7 +158,7 @@ fn level_setup(
                 Vec3 {
                     x: v as f32,
                     y: 0.,
-                    z: 20.,
+                    z: LINE_NUMBER as f32,
                 },
             ],
         };
@@ -204,35 +213,45 @@ fn zoom(
     camera: Single<&mut Projection, With<Camera>>,
     camera_settings: Res<CameraSettings>,
     mouse_wheel_input: Res<AccumulatedMouseScroll>,
+    keyboard: Res<ButtonInput<KeyCode>>,
 ) {
-    // Usually, you won't need to handle both types of projection,
-    // but doing so makes for a more complete example.
+    // Compute zoom from mouse wheel (same logic you already have)
+    let wheel_delta = mouse_wheel_input.delta.y;
+
+    // Compute zoom from keyboard
+    // Q = zoom in (negative delta), E = zoom out (positive delta)
+    let mut key_delta = 0.0;
+    if keyboard.pressed(KeyCode::KeyQ) {
+        key_delta -= 1.0; // zoom in
+    }
+    if keyboard.pressed(KeyCode::KeyE) {
+        key_delta += 1.0; // zoom out
+    }
+
     match *camera.into_inner() {
         Projection::Orthographic(ref mut orthographic) => {
-            // We want scrolling up to zoom in, decreasing the scale, so we negate the delta.
-            let delta_zoom = -mouse_wheel_input.delta.y * camera_settings.orthographic_zoom_speed;
-            // When changing scales, logarithmic changes are more intuitive.
-            // To get this effect, we add 1 to the delta, so that a delta of 0
-            // results in no multiplicative effect, positive values result in a multiplicative increase,
-            // and negative values result in multiplicative decreases.
-            let multiplicative_zoom = 1. + delta_zoom;
+            let total_delta = -(wheel_delta * camera_settings.orthographic_zoom_speed)
+                + (key_delta * camera_settings.orthographic_zoom_speed);
+
+            let multiplicative_zoom = 1.0 + total_delta;
 
             orthographic.scale = (orthographic.scale * multiplicative_zoom).clamp(
                 camera_settings.orthographic_zoom_range.start,
                 camera_settings.orthographic_zoom_range.end,
             );
         }
-        Projection::Perspective(ref mut perspective) => {
-            // We want scrolling up to zoom in, decreasing the scale, so we negate the delta.
-            let delta_zoom = -mouse_wheel_input.delta.y * camera_settings.perspective_zoom_speed;
 
-            // Adjust the field of view, but keep it within our stated range.
-            perspective.fov = (perspective.fov + delta_zoom).clamp(
+        Projection::Perspective(ref mut perspective) => {
+            let total_delta = -(wheel_delta * camera_settings.perspective_zoom_speed)
+                + (key_delta * camera_settings.perspective_zoom_speed);
+
+            perspective.fov = (perspective.fov + total_delta).clamp(
                 camera_settings.perspective_zoom_range.start,
                 camera_settings.perspective_zoom_range.end,
             );
         }
-        _ => (),
+
+        _ => {}
     }
 }
 
@@ -243,7 +262,11 @@ fn orbit(
     mouse_motion: Res<AccumulatedMouseMotion>,
     time: Res<Time>,
 ) {
-    let target = Vec3::ZERO;
+    let target = Vec3 {
+        x: (LINE_NUMBER as f32) * 0.5,
+        y: 0.,
+        z: (LINE_NUMBER as f32) * 0.5,
+    };
     let delta = mouse_motion.delta;
     let mut delta_roll = 0.0;
 
