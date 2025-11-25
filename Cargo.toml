@@ -11,6 +11,7 @@ fast-compile = ["bevy/dynamic_linking"]
 bevy = { version = "0.17.3", features = ["serialize"] }
 ron = "0.12.0"
 serde = { version = "1.0.228", features = ["derive"] }
+thiserror = "2.0.17"
 zip = "6.0.0"
 
 # Enable a small amount of optimization in the dev profile.
