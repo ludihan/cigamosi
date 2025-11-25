@@ -80,16 +80,16 @@ fn level_setup(
     let hover_matl = materials.add(Color::from(CYAN_300));
     let pressed_matl = materials.add(Color::from(YELLOW_300));
 
-    commands.spawn((
-        Name::new("Plane"),
-        Mesh3d(meshes.add(Plane3d::default().mesh().size(5.0, 5.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.3, 0.5, 0.3),
-            // Turning off culling keeps the plane visible when viewed from beneath.
-            cull_mode: None,
-            ..default()
-        })),
-    ));
+    //  commands.spawn((
+    //      Name::new("Plane"),
+    //      Mesh3d(meshes.add(Plane3d::default().mesh().size(5.0, 5.0))),
+    //      MeshMaterial3d(materials.add(StandardMaterial {
+    //          base_color: Color::srgb(0.3, 0.5, 0.3),
+    //          // Turning off culling keeps the plane visible when viewed from beneath.
+    //          cull_mode: None,
+    //          ..default()
+    //      })),
+    //  ));
 
     commands
         .spawn((
@@ -102,6 +102,7 @@ fn level_setup(
         .observe(update_material_on::<Pointer<Out>>(white_matl.clone()))
         .observe(update_material_on::<Pointer<Press>>(pressed_matl.clone()))
         .observe(update_material_on::<Pointer<Release>>(hover_matl.clone()));
+
     commands
         .spawn((
             Name::new("Cube2"),
@@ -119,6 +120,47 @@ fn level_setup(
         PointLight::default(),
         Transform::from_xyz(3.0, 8.0, 5.0),
     ));
+
+    for v in (0..=20).step_by(2) {
+        // Line parallel to X-axis (offset on Z)
+        let x_line = Segment3d {
+            vertices: [
+                Vec3 {
+                    x: 0.,
+                    y: 0.,
+                    z: v as f32,
+                },
+                Vec3 {
+                    x: 20.,
+                    y: 0.,
+                    z: v as f32,
+                },
+            ],
+        };
+
+        // Line parallel to Z-axis (offset on X)
+        let z_line = Segment3d {
+            vertices: [
+                Vec3 {
+                    x: v as f32,
+                    y: 0.,
+                    z: 0.,
+                },
+                Vec3 {
+                    x: v as f32,
+                    y: 0.,
+                    z: 20.,
+                },
+            ],
+        };
+
+        for line in [x_line, z_line] {
+            commands.spawn((
+                Mesh3d(meshes.add(line)),
+                MeshMaterial3d(materials.add(Color::WHITE)),
+            ));
+        }
+    }
 }
 
 // Returns an observer that updates the entity's material to the one specified.
