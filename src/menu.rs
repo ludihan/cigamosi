@@ -86,6 +86,7 @@ fn button(game_state: GameState, text: impl Into<String>, assets: &AssetServer) 
             // vertically center child text
             align_items: AlignItems::Center,
             padding: UiRect::all(px(5f32)),
+            margin: UiRect::all(px(5f32)),
             ..default()
         },
         BorderColor::all(Color::WHITE),
