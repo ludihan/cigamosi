@@ -75,6 +75,17 @@ fn level_setup(
         .observe(update_material_on::<Pointer<Out>>(white_matl.clone()))
         .observe(update_material_on::<Pointer<Press>>(pressed_matl.clone()))
         .observe(update_material_on::<Pointer<Release>>(hover_matl.clone()));
+    commands
+        .spawn((
+            Name::new("Cube2"),
+            Mesh3d(meshes.add(Cuboid::default())),
+            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
+            Transform::from_xyz(2.5, 0.51, 1.5),
+        ))
+        .observe(update_material_on::<Pointer<Over>>(hover_matl.clone()))
+        .observe(update_material_on::<Pointer<Out>>(white_matl.clone()))
+        .observe(update_material_on::<Pointer<Press>>(pressed_matl.clone()))
+        .observe(update_material_on::<Pointer<Release>>(hover_matl.clone()));
 
     commands.spawn((
         Name::new("Light"),
