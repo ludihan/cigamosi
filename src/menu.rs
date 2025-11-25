@@ -1,6 +1,6 @@
 use bevy::{input_focus::InputFocus, prelude::*};
 
-use crate::GameState;
+use crate::{GameState, game::EmbeddedFonts};
 
 pub struct MenuPlugin;
 
@@ -23,7 +23,13 @@ impl Plugin for MenuPlugin {
     }
 }
 
-fn menu_setup(mut commands: Commands, assets: Res<AssetServer>) {
+fn menu_setup(mut commands: Commands, assets: Res<AssetServer>, mut fonts: ResMut<Assets<Font>>) {
+    let font = Font::try_from_bytes(crate::FONT.to_vec()).expect("Failed to load embedded font");
+
+    let font_handle = fonts.add(font);
+    commands.insert_resource(EmbeddedFonts {
+        ui_font: font_handle.clone(),
+    });
     commands.spawn((
         DespawnOnExit(GameState::Menu),
         Node {
@@ -44,7 +50,7 @@ fn menu_setup(mut commands: Commands, assets: Res<AssetServer>) {
                 children![(
                     Text::new("Isomagic"),
                     TextFont {
-                        font: assets.load("fonts/Iosevka.ttc"),
+                        font: font_handle.clone(),
                         font_size: 100.0,
                         ..default()
                     },
@@ -63,18 +69,33 @@ fn menu_setup(mut commands: Commands, assets: Res<AssetServer>) {
                     ..default()
                 },
                 children![
-                    button(GameState::Level, "Levels", &assets),
-                    button(GameState::CustomLevel, "Custom Levels", &assets),
-                    button(GameState::Editor, "Editor", &assets),
-                    button(GameState::Settings, "Settings", &assets),
-                    button(GameState::Exit, "Exit", &assets),
+                    button(GameState::Level, "Levels", &assets, font_handle.clone()),
+                    button(
+                        GameState::CustomLevel,
+                        "Custom Levels",
+                        &assets,
+                        font_handle.clone()
+                    ),
+                    button(GameState::Editor, "Editor", &assets, font_handle.clone()),
+                    button(
+                        GameState::Settings,
+                        "Settings",
+                        &assets,
+                        font_handle.clone()
+                    ),
+                    button(GameState::Exit, "Exit", &assets, font_handle.clone()),
                 ],
             )
         ],
     ));
 }
 
-fn button(game_state: GameState, text: impl Into<String>, assets: &AssetServer) -> impl Bundle {
+fn button(
+    game_state: GameState,
+    text: impl Into<String>,
+    assets: &AssetServer,
+    font: Handle<Font>,
+) -> impl Bundle {
     ((
         ButtonType(game_state),
         Button,
@@ -95,7 +116,7 @@ fn button(game_state: GameState, text: impl Into<String>, assets: &AssetServer) 
         children![(
             Text::new(text),
             TextFont {
-                font: assets.load("fonts/Iosevka.ttc"),
+                font: font.clone(),
                 font_size: 33.0,
                 ..default()
             },

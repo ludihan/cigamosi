@@ -17,6 +17,8 @@ use thiserror::Error;
 
 use crate::{GameState, menu::MenuPlugin};
 
+const LINE_NUMBER: i32 = 10;
+
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
@@ -34,6 +36,11 @@ impl Plugin for GamePlugin {
             .init_resource::<State>()
             .init_state::<GameState>();
     }
+}
+
+#[derive(Resource)]
+pub struct EmbeddedFonts {
+    pub ui_font: Handle<Font>,
 }
 
 fn setup(mut commands: Commands, assets: Res<AssetServer>) {
@@ -75,8 +82,6 @@ enum ObjectType {
     Cube,
     Ramp(Quat),
 }
-
-const LINE_NUMBER: i32 = 10;
 
 fn level_setup(
     mut commands: Commands,

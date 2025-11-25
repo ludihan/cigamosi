@@ -4,6 +4,8 @@ mod editor;
 mod game;
 mod menu;
 
+const FONT: &[u8] = include_bytes!("../assets/fonts/Iosevka.ttc");
+
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
 enum GameState {
     #[default]
