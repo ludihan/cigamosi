@@ -1,4 +1,4 @@
-use bevy::{color::palettes::basic::*, input_focus::InputFocus, prelude::*};
+use bevy::{input_focus::InputFocus, prelude::*};
 
 use crate::GameState;
 
