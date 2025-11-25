@@ -2,36 +2,62 @@ use std::{
     collections::HashMap,
     f32::consts::{FRAC_PI_2, PI},
     ops::Range,
-    path::PathBuf,
 };
 
 use bevy::{
+    asset::{AssetLoader, LoadContext, io::Reader},
     camera::ScalingMode,
     color::palettes::tailwind::{CYAN_300, GRAY_300, YELLOW_300},
     input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
+    math::U8Vec3,
     prelude::*,
 };
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::{CameraSettings, GameState, IsProjectionOrtho, menu::MenuPlugin};
+use crate::{GameState, menu::MenuPlugin};
 
 pub struct GamePlugin;
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(DefaultPlugins)
-            .add_plugins(MeshPickingPlugin)
-            .add_plugins(MenuPlugin)
+        app.add_plugins(MenuPlugin)
+            .add_systems(Startup, setup)
             .add_systems(OnEnter(GameState::Level), level_setup)
             .add_systems(
                 Update,
                 (switch_projection, zoom, orbit, block_manipulation)
                     .run_if(in_state(GameState::Level)),
             )
+            .init_asset::<Level>()
+            .init_asset_loader::<LevelLoader>()
+            .init_resource::<State>()
             .init_state::<GameState>();
     }
 }
 
+fn setup(mut commands: Commands, assets: Res<AssetServer>) {
+    let camera_settings = CameraSettings::default();
+
+    commands.spawn((
+        Name::new("Camera"),
+        Camera3d::default(),
+        Projection::Orthographic(OrthographicProjection {
+            // We can set the scaling mode to FixedVertical to keep the viewport height constant as its aspect ratio changes.
+            // The viewport height is the height of the camera's view in world units when the scale is 1.
+            scaling_mode: ScalingMode::FixedVertical {
+                viewport_height: camera_settings.orthographic_viewport_height,
+            },
+            // This is the default value for scale for orthographic projections.
+            // To zoom in and out, change this value, rather than `ScalingMode` or the camera's position.
+            scale: 1.,
+            ..OrthographicProjection::default_3d()
+        }),
+        Transform::from_xyz(5.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    commands.insert_resource(camera_settings);
+}
 #[derive(Serialize, Deserialize, Asset, TypePath)]
 struct LevelData {
     data: HashMap<IVec3, ObjectType>,
@@ -47,6 +73,7 @@ fn level_setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut state: ResMut<State>,
 ) {
     let white_matl = materials.add(Color::WHITE);
     let ground_matl = materials.add(Color::from(GRAY_300));
@@ -108,24 +135,12 @@ fn update_material_on<E: EntityEvent>(
     }
 }
 
-fn editor_setup(mut commands: Commands) {}
-fn custom_level_setup(mut commands: Commands) {}
-
 fn switch_projection(
     mut camera: Single<&mut Projection, With<Camera>>,
-    current_projection: Single<(&mut IsProjectionOrtho, &mut Text)>,
     camera_settings: Res<CameraSettings>,
     keyboard_input: Res<ButtonInput<KeyCode>>,
 ) {
     if keyboard_input.just_pressed(KeyCode::Space) {
-        let (mut is_ortho, mut text_projection) = current_projection.into_inner();
-        if is_ortho.0 {
-            *text_projection = "Perspective".into();
-        } else {
-            *text_projection = "Orthographic".into();
-        }
-
-        (*is_ortho).0 = !(*is_ortho).0;
         // Switch projection type
         **camera = match **camera {
             Projection::Orthographic(_) => Projection::Perspective(PerspectiveProjection {
@@ -229,4 +244,98 @@ fn block_manipulation(camera_query: Single<(&Camera, &GlobalTransform)>, window:
     {
         println!("{ray:?}");
     }
+}
+
+#[derive(Debug, Resource)]
+struct CameraSettings {
+    /// The height of the viewport in world units when the orthographic camera's scale is 1
+    pub orthographic_viewport_height: f32,
+    /// Clamp the orthographic camera's scale to this range
+    pub orthographic_zoom_range: Range<f32>,
+    /// Multiply mouse wheel inputs by this factor when using the orthographic camera
+    pub orthographic_zoom_speed: f32,
+    /// Clamp perspective camera's field of view to this range
+    pub perspective_zoom_range: Range<f32>,
+    /// Multiply mouse wheel inputs by this factor when using the perspective camera
+    pub perspective_zoom_speed: f32,
+    pub orbit_distance: f32,
+    pub pitch_speed: f32,
+    // Clamp pitch to this range
+    pub pitch_range: Range<f32>,
+    pub roll_speed: f32,
+    pub yaw_speed: f32,
+}
+
+impl Default for CameraSettings {
+    fn default() -> Self {
+        let pitch_limit = FRAC_PI_2 - 0.01;
+        Self {
+            orthographic_viewport_height: 5.,
+            // In orthographic projections, we specify camera scale relative to a default value of 1,
+            // in which one unit in world space corresponds to one pixel.
+            orthographic_zoom_range: 1f32..2.0,
+            // This value was hand-tuned to ensure that zooming in and out feels smooth but not slow.
+            orthographic_zoom_speed: 0.2,
+            // Perspective projections use field of view, expressed in radians. We would
+            // normally not set it to more than π, which represents a 180° FOV.
+            perspective_zoom_range: (PI / 12f32)..(PI / 5f32),
+            // Changes in FOV are much more noticeable due to its limited range in radians
+            perspective_zoom_speed: 0.05,
+            orbit_distance: 20.0,
+            pitch_speed: 0.003,
+            pitch_range: -pitch_limit..pitch_limit,
+            roll_speed: 1.0,
+            yaw_speed: 0.004,
+        }
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct State {
+    level: Handle<Level>,
+}
+
+#[derive(Serialize, Deserialize, Asset, TypePath, Debug, Resource)]
+struct Level {
+    name: String,
+    data: HashMap<U8Vec3, BlockType>,
+}
+
+#[derive(Default)]
+struct LevelLoader;
+
+#[non_exhaustive]
+#[derive(Debug, Error)]
+enum LevelLoaderError {
+    #[error("Could not load asset: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Could not parse RON: {0}")]
+    RonSpannedError(#[from] ron::error::SpannedError),
+}
+
+impl AssetLoader for LevelLoader {
+    type Asset = Level;
+    type Settings = ();
+    type Error = LevelLoaderError;
+    async fn load(
+        &self,
+        reader: &mut dyn Reader,
+        _settings: &(),
+        _load_context: &mut LoadContext<'_>,
+    ) -> Result<Self::Asset, Self::Error> {
+        let mut bytes = Vec::new();
+        reader.read_to_end(&mut bytes).await?;
+        let custom_asset = ron::de::from_bytes::<Level>(&bytes)?;
+        Ok(custom_asset)
+    }
+
+    fn extensions(&self) -> &[&str] {
+        &["isomagic"]
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+enum BlockType {
+    Cube,
+    Ramp(Quat),
 }

@@ -159,4 +159,6 @@ fn editor_setup() {}
 fn level_setup(commands: Commands) {}
 fn settings_setup() {}
 fn custom_level_setup() {}
-fn exit_setup() {}
+fn exit_setup(mut exit: MessageWriter<AppExit>) {
+    exit.write(AppExit::Success);
+}
