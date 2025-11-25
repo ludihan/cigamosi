@@ -7,6 +7,7 @@ use std::{
 
 use bevy::{
     camera::ScalingMode,
+    color::palettes::tailwind::{CYAN_300, GRAY_300, YELLOW_300},
     input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
     prelude::*,
 };
@@ -47,6 +48,11 @@ fn level_setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let white_matl = materials.add(Color::WHITE);
+    let ground_matl = materials.add(Color::from(GRAY_300));
+    let hover_matl = materials.add(Color::from(CYAN_300));
+    let pressed_matl = materials.add(Color::from(YELLOW_300));
+
     commands.spawn((
         Name::new("Plane"),
         Mesh3d(meshes.add(Plane3d::default().mesh().size(5.0, 5.0))),
@@ -58,12 +64,17 @@ fn level_setup(
         })),
     ));
 
-    commands.spawn((
-        Name::new("Cube"),
-        Mesh3d(meshes.add(Cuboid::default())),
-        MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
-        Transform::from_xyz(1.5, 0.51, 1.5),
-    ));
+    commands
+        .spawn((
+            Name::new("Cube"),
+            Mesh3d(meshes.add(Cuboid::default())),
+            MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
+            Transform::from_xyz(1.5, 0.51, 1.5),
+        ))
+        .observe(update_material_on::<Pointer<Over>>(hover_matl.clone()))
+        .observe(update_material_on::<Pointer<Out>>(white_matl.clone()))
+        .observe(update_material_on::<Pointer<Press>>(pressed_matl.clone()))
+        .observe(update_material_on::<Pointer<Release>>(hover_matl.clone()));
 
     commands.spawn((
         Name::new("Light"),
@@ -71,6 +82,21 @@ fn level_setup(
         Transform::from_xyz(3.0, 8.0, 5.0),
     ));
 }
+
+// Returns an observer that updates the entity's material to the one specified.
+fn update_material_on<E: EntityEvent>(
+    new_material: Handle<StandardMaterial>,
+) -> impl Fn(On<E>, Query<&mut MeshMaterial3d<StandardMaterial>>) {
+    // An observer closure that captures `new_material`. We do this to avoid needing to write four
+    // versions of this observer, each triggered by a different event and with a different hardcoded
+    // material. Instead, the event type is a generic, and the material is passed in.
+    move |event, mut query| {
+        if let Ok(mut material) = query.get_mut(event.event_target()) {
+            material.0 = new_material.clone();
+        }
+    }
+}
+
 fn editor_setup(mut commands: Commands) {}
 fn custom_level_setup(mut commands: Commands) {}
 
